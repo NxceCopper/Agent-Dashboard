@@ -1,48 +1,171 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Agent Office Dashboard</title>
   <style>
+    :root { color-scheme: dark; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; }
     h1 { color: #38bdf8; }
+    h2 { font-size: 1.1rem; color: #cbd5e1; }
     .card { background: #1e293b; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #334155; }
     .status { font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 4px; display: inline-block; text-transform: uppercase; font-size: 0.8rem; }
     .status.working { background: #0284c7; color: white; }
     .status.idle, .status.ready { background: #16a34a; color: white; }
+    .status.blocked, .status.error { background: #dc2626; color: white; }
+    .status.done { background: #7c3aed; color: white; }
+    .status.unknown { background: #475569; color: white; }
     .log-item { font-size: 0.9rem; color: #94a3b8; border-bottom: 1px solid #334155; padding: 0.5rem 0; }
+    .empty { color: #64748b; font-style: italic; }
+    #banner { display: none; background: #7f1d1d; border: 1px solid #dc2626; color: #fecaca;
+              padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    #banner.show { display: block; }
+    #conn { font-size: 0.8rem; color: #64748b; font-weight: normal; margin-left: 0.5rem; }
+    #conn.ok { color: #16a34a; }
+    #conn.bad { color: #dc2626; }
   </style>
 </head>
 <body>
-  <h1>🧭 Real-Time AI Agent Office</h1>
+  <h1>🧭 Real-Time AI Agent Office <span id="conn" class="ok">connecting…</span></h1>
+  <div id="banner" role="alert"></div>
   <div id="agents"></div>
   <h2>Recent Activity</h2>
   <div class="card" id="logs"></div>
 
   <script>
-    async function refresh() {
-      const res = await fetch('/api/state');
-      const data = await res.json();
+    'use strict';
 
-      const agentsContainer = document.getElementById('agents');
-      agentsContainer.innerHTML = data.agents.map(a => `
-        <div class="card">
-          <h3>${a.name} <span class="status ${a.status}">${a.status}</span></h3>
-          <p><strong>Role:</strong> ${a.role}</p>
-          <p><strong>Current Task:</strong> ${a.currentTask}</p>
-          <p style="color:#64748b; font-size:0.8rem">Last Active: ${new Date(a.lastActive).toLocaleString()}</p>
-        </div>
-      `).join('');
+    // Statuses the stylesheet knows how to render. Anything else is
+    // downgraded to .unknown so state data can never inject CSS classes.
+    const KNOWN_STATUSES = ['working', 'idle', 'ready', 'blocked', 'error', 'done'];
 
-      const logsContainer = document.getElementById('logs');
-      logsContainer.innerHTML = data.activityLog.map(l => `
-        <div class="log-item">
-          <strong>[${new Date(l.timestamp).toLocaleTimeString()}] ${l.agentId}:</strong> ${l.message}
-        </div>
-      `).join('');
+    let lastGood = null;   // most recent payload that parsed successfully
+    let failures = 0;      // consecutive fetch failures
+    const MAX_INLINE = 1000;
+
+    const $ = (id) => document.getElementById(id);
+
+    /**
+     * Escape a value for safe interpolation into HTML.
+     * Covers &, <, >, ", ' — state.json is not trusted input.
+     */
+    function esc(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .slice(0, MAX_INLINE)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
+    function statusClass(status) {
+      const s = String(status || '').toLowerCase();
+      return KNOWN_STATUSES.includes(s) ? s : 'unknown';
+    }
+
+    function fmtDate(value) {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? 'unknown' : d.toLocaleString();
+    }
+
+    function fmtTime(value) {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? '--:--:--' : d.toLocaleTimeString();
+    }
+
+    // Coerce whatever arrived into a renderable shape — never assume arrays.
+    function shape(data) {
+      const d = data && typeof data === 'object' ? data : {};
+      return {
+        agents: Array.isArray(d.agents) ? d.agents : [],
+        activityLog: Array.isArray(d.activityLog) ? d.activityLog : [],
+      };
+    }
+
+    function render(data) {
+      const { agents, activityLog } = shape(data);
+
+      $('agents').innerHTML = agents.length
+        ? agents.map((a) => `
+          <div class="card">
+            <h3>${esc(a.name || a.id)} <span class="status ${statusClass(a.status)}">${esc(a.status)}</span></h3>
+            <p><strong>Role:</strong> ${esc(a.role)}</p>
+            <p><strong>Current Task:</strong> ${esc(a.currentTask)}</p>
+            <p style="color:#64748b; font-size:0.8rem">Last Active: ${esc(fmtDate(a.lastActive))}</p>
+          </div>`).join('')
+        : '<div class="card empty">No agents registered yet.</div>';
+
+      $('logs').innerHTML = activityLog.length
+        ? activityLog.map((l) => `
+          <div class="log-item">
+            <strong>[${esc(fmtTime(l.timestamp))}] ${esc(l.agentId)}:</strong> ${esc(l.message)}
+          </div>`).join('')
+        : '<div class="empty">No activity yet.</div>';
+    }
+
+    function setBanner(message) {
+      const el = $('banner');
+      if (message) {
+        el.textContent = message;
+        el.classList.add('show');
+      } else {
+        el.textContent = '';
+        el.classList.remove('show');
+      }
+    }
+
+    function setConn(state, text) {
+      const el = $('conn');
+      el.className = state;
+      el.textContent = text;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/state', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const data = await res.json();
+        if (!data || typeof data !== 'object') throw new Error('Malformed response');
+
+        lastGood = data;
+        failures = 0;
+        render(data);
+        setConn('ok', 'live');
+        setBanner('');
+      } catch (err) {
+        failures += 1;
+        // Keep the last good frame on screen rather than blanking the page.
+        if (lastGood) render(lastGood);
+
+        if (failures === 1) {
+          setConn('bad', 'reconnecting…');
+          setBanner('Lost connection to the dashboard server — retrying…');
+        } else if (failures === 10) {
+          setBanner('Still unreachable. Is the server running? (node server.js)');
+        }
+        // Back off gently instead of hammering a down server.
+        schedule(Math.min(1000 * 2 ** Math.min(failures, 5), 15000));
+        return;
+      }
+
+      schedule(2000);
+    }
+
+    let timer = null;
+    function schedule(ms) {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, ms);
+    }
+
+    render({ agents: [], activityLog: [] });
     refresh();
-    setInterval(refresh, 2000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refresh();
+    });
   </script>
 </body>
 </html>
