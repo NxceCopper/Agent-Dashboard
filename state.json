@@ -1,0 +1,30 @@
+{
+  "system": "Real-Time AI Agent Office",
+  "updatedAt": "2026-11-09T15:04:24.625Z",
+  "agents": [
+    {
+      "id": "claw",
+      "name": "Arie (OpenClaw)",
+      "role": "Primary Coordinator",
+      "status": "idle",
+      "currentTask": "Monitoring workspace and ready for instructions",
+      "lastActive": "2026-11-09T15:04:24.625Z"
+    },
+    {
+      "id": "opencode-builder",
+      "name": "Opencode Builder",
+      "role": "Code & Architecture",
+      "status": "ready",
+      "currentTask": "Idle",
+      "lastActive": "2026-11-09T15:04:24.625Z"
+    }
+  ],
+  "tasks": [],
+  "activityLog": [
+    {
+      "timestamp": "2026-11-09T15:04:24.625Z",
+      "agentId": "claw",
+      "message": "Agent Dashboard initialized"
+    }
+  ]
+}

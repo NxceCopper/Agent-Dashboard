@@ -1,0 +1,12 @@
+{
+  "name": "agent-dashboard",
+  "version": "1.0.0",
+  "description": "100% local real-time AI agent office dashboard and state sync engine",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
