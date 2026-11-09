@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Agent Office Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; }
+    h1 { color: #38bdf8; }
+    .card { background: #1e293b; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #334155; }
+    .status { font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 4px; display: inline-block; text-transform: uppercase; font-size: 0.8rem; }
+    .status.working { background: #0284c7; color: white; }
+    .status.idle, .status.ready { background: #16a34a; color: white; }
+    .log-item { font-size: 0.9rem; color: #94a3b8; border-bottom: 1px solid #334155; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>🧭 Real-Time AI Agent Office</h1>
+  <div id="agents"></div>
+  <h2>Recent Activity</h2>
+  <div class="card" id="logs"></div>
+
+  <script>
+    async function refresh() {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+
+      const agentsContainer = document.getElementById('agents');
+      agentsContainer.innerHTML = data.agents.map(a => `
+        <div class="card">
+          <h3>${a.name} <span class="status ${a.status}">${a.status}</span></h3>
+          <p><strong>Role:</strong> ${a.role}</p>
+          <p><strong>Current Task:</strong> ${a.currentTask}</p>
+          <p style="color:#64748b; font-size:0.8rem">Last Active: ${new Date(a.lastActive).toLocaleString()}</p>
+        </div>
+      `).join('');
+
+      const logsContainer = document.getElementById('logs');
+      logsContainer.innerHTML = data.activityLog.map(l => `
+        <div class="log-item">
+          <strong>[${new Date(l.timestamp).toLocaleTimeString()}] ${l.agentId}:</strong> ${l.message}
+        </div>
+      `).join('');
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
